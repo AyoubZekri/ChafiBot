@@ -142,7 +142,15 @@ ANSWER_RULES = """
 المصادر:
 {sources}"""
 
-CALC_RULE = "- لأي عملية حسابية استعمل الأداة calculate ولا تحسب بنفسك، ثم اذكر النتيجة.\n"
+CONTEXT_RULE = """
+
+المحادثة السابقة (لفهم سؤال المستخدم الحالي وربطه بما قبله فقط):
+{history}
+- إذا كان السؤال الحالي تكملة لما سبق (مثل "عليه"، "هذا"، "وفي G50؟") فافهمه في ضوئه.
+- جاوب عن السؤال الحالي فقط ومن المصادر، ولا تكرر جواباً سابقاً كما هو.
+- إذا كان السؤال الحالي عن موضوع جديد فتجاهل المحادثة السابقة."""
+
+CALC_RULE ="- لأي عملية حسابية استعمل الأداة calculate ولا تحسب بنفسك، ثم اذكر النتيجة.\n"
 
 # فهم السؤال قبل البحث: المستخدم يكتب بالدارجة، بأخطاء، أو بسؤال ناقص يعتمد على ما قبله
 UNDERSTAND_PROMPT = """مهمتك: أعد كتابة آخر رسالة للمستخدم كسؤال جبائي كامل وواضح ومستقل بالعربية الفصحى،
@@ -299,29 +307,27 @@ def meaningless(state: State):
     return {"messages": [AIMessage(NOT_FOUND[state["lang"]])], "route": "not_found"}
 
 
-# رسالة تكمّل ما قبلها: "وفي G50؟"، "وهذا؟"، "and for companies?"، "et pour G50 ?"
-_FOLLOW_UP = re.compile(
-    r"^\s*(و(في|على|عن|ل|ال|هل|كم|ش|ق|ما|اذا|إذا|كيف|بالنسبة)|ف(ي|ماذا)|ثم|بالنسبة|"
-    r"and\b|what about|how about|et\b|alors|pour\b)"
-    r"|(هذا|هذه|ذلك|تلك|هاذا|هاذي|هذاك|هذيك|نفس)\b|\b(this|that|it|same|ça|cela|même)\b",
-    re.IGNORECASE,
-)
-
-
-def is_follow_up(question):
-    """هل الرسالة تكملة للمحادثة (تحتاجها لتُفهم)، أم سؤال جديد مستقل؟"""
-    return len(question.split()) <= 3 or bool(_FOLLOW_UP.search(question))
-
-
 def _history_text(messages, limit=4, max_chars=300):
     """آخر الرسائل السابقة (بدون الرسالة الحالية) كنص قصير"""
     lines = []
-    for m in messages[:-1]:
+    for m in _previous(messages):
         if isinstance(m, HumanMessage):
             lines.append(f"المستخدم: {str(m.content)[:max_chars]}")
         elif isinstance(m, AIMessage) and m.content and not m.tool_calls:
             lines.append(f"المساعد: {str(m.content)[:max_chars]}")
     return "\n".join(lines[-limit:]) or "(لا توجد)"
+
+
+def _previous(messages):
+    """رسائل المحادثة قبل السؤال الحالي"""
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], HumanMessage):
+            return messages[:i]
+    return []
+
+
+def _has_history(state: State):
+    return any(isinstance(m, AIMessage) for m in _previous(state["messages"]))
 
 
 # كلمات دارجة: السؤال يحتاج تحويلاً للفصحى قبل البحث
@@ -333,13 +339,13 @@ _DIALECT = re.compile(
 
 def needs_understanding(state: State):
     """مرحلة الفهم (استدعاء إضافي للنموذج، بطيء على المعالج) فقط عند الحاجة:
-    سؤال تكملة لمحادثة، أو بالدارجة، أو فيه كلمات غير معروفة (أخطاء إملائية أو لغة أخرى)"""
+    داخل محادثة (لربط السؤال بما قبله: "عليه"، "وفي G50"...)، أو بالدارجة،
+    أو فيه كلمات غير معروفة (أخطاء إملائية أو لغة أخرى)"""
     if config.UNDERSTAND_MODE == "always":
         return True
     question = state["question"]
-    has_history = any(isinstance(m, AIMessage) for m in state["messages"][:-1])
     return bool(
-        (has_history and is_follow_up(question))
+        _has_history(state)
         or _DIALECT.search(question)
         or unknown_words(question)
     )
@@ -352,7 +358,9 @@ def understand(state: State):
     if not needs_understanding(state):
         # سؤال واضح بالفصحى: يُبحث به كما هو، بدون استدعاء النموذج
         return {"standalone": state["question"], "search_query": state["question"]}
-    history = _history_text(state["messages"]) if is_follow_up(state["question"]) else "(لا توجد)"
+    # المحادثة تُعطى دائماً داخل محادثة: النموذج يربط بها السؤال إن كان تكملة،
+    # ويتجاهلها إن كان سؤالاً جديداً (حسب التعليمات)
+    history = _history_text(state["messages"])
     text = rewriter.invoke(UNDERSTAND_PROMPT.format(
         history=history, question=state["question"])).content.strip()
     # خارج الجباية، إلا إذا كان في السؤال كلمة جبائية (حماية من خطأ النموذج)
@@ -424,9 +432,12 @@ def generate(state: State):
     # المستخدم قد يكتب بالدارجة أو بسؤال ناقص: نعطي النموذج ما فهمناه
     if state["standalone"] != state["question"]:
         system += f"\n\nالمقصود من آخر رسالة للمستخدم: {state['standalone']}"
+    # ترابط المحادثة: ملخص قصير لما سبق، للفهم فقط (الجواب من المصادر، بدون تكرار)
+    if _has_history(state):
+        system += CONTEXT_RULE.format(history=_history_text(
+            state["messages"], limit=4, max_chars=250))
     model = llm_with_tools if use_tools else llm
-    # السؤال الحالي فقط (مع ردود أداة الحساب): لا أجوبة سابقة يكررها النموذج.
-    # السؤال الناقص كُمّل في "understand"، فالمحادثة السابقة لم تعد لازمة هنا
+    # الرسائل: السؤال الحالي فقط (مع ردود أداة الحساب)، والمحادثة السابقة في الملخص أعلاه
     reply = model.invoke([SystemMessage(system), *_current_turn(state["messages"])])
     if isinstance(reply, AIMessage) and not reply.tool_calls:
         # بدون تفكير النموذج؛ وإذا لم يبقَ جواب (تفكير لم يكتمل) فهو "لم يتم العثور"
