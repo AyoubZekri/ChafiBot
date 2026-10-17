@@ -158,12 +158,12 @@ THANKS = re.compile(
 
 SMALL_TALK_REPLIES = {
     "greeting": {
-        "ar": "وعليكم السلام، أنا ChafiBot 😊 كيفاش نقدر نعاونك في الجباية اليوم؟",
+        "ar": "وعليكم السلام ورحمة الله، أنا ChafiBot 😊 كيف يمكنني مساعدتك في الجباية اليوم؟",
         "en": "Hello, I'm ChafiBot 😊 How can I help you with taxes today?",
         "fr": "Bonjour, je suis ChafiBot 😊 Comment puis-je vous aider en fiscalité ?",
     },
     "thanks": {
-        "ar": "العفو! إذا عندك سؤال آخر أنا هنا. 🙏",
+        "ar": "العفو، يسعدني ذلك! إذا كان لديك سؤال آخر فأنا في الخدمة. 🙏",
         "en": "You're welcome! I'm here if you have another question. 🙏",
         "fr": "Avec plaisir ! Je suis là si vous avez une autre question. 🙏",
     },
@@ -174,8 +174,8 @@ OFF_TOPIC_REPLIES = {
     "ar": [
         "أنا ChafiBot، مساعد جبائي فقط 😊 لا أستطيع الإجابة عن هذا، لكن يسعدني مساعدتك في الضرائب والتصريحات والأنظمة الجبائية.",
         "عذراً، هذا خارج تخصصي؛ أنا ChafiBot، مساعد الجباية في تطبيق شافي. اسألني مثلاً عن آخر أجل تصريح أو عن نظامك الجبائي.",
-        "هذا السؤال خارج مجال الجباية 🙂 أنا هنا لأساعدك في الضرائب، الغرامات، المواعيد الجبائية والمؤسسات.",
-        "لا أملك معلومات عن هذا الموضوع، فأنا ChafiBot، مساعد جبائي فقط. هل عندك سؤال عن الضرائب أو التصريحات؟",
+        "هذا السؤال خارج مجال الجباية 🙂 أنا هنا لمساعدتك في الضرائب والغرامات والمواعيد الجبائية والمؤسسات.",
+        "لا أملك معلومات عن هذا الموضوع، فأنا ChafiBot، مساعد جبائي فقط. هل لديك سؤال عن الضرائب أو التصريحات؟",
     ],
     "en": [
         "I'm ChafiBot, a tax-only assistant 😊 I can't help with that, but I'm happy to help with taxes, declarations and tax regimes.",
