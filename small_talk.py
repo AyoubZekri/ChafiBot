@@ -234,6 +234,13 @@ GIBBERISH_REPLIES = {
     ],
 }
 
+# لم يُعثر على جواب: رسالة عادية في المحادثة (لا خطأ)
+NOT_FOUND_REPLIES = {
+    "ar": ["لم يتم العثور على إجابة 😔 حاول صياغة سؤالك بطريقة أخرى."],
+    "en": ["No answer found 😔 Try rephrasing your question."],
+    "fr": ["Aucune réponse trouvée 😔 Essayez de reformuler votre question."],
+}
+
 # ---------------- التطبيع والتطابق
 
 

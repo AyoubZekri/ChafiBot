@@ -287,7 +287,9 @@ def route_after_classify(state: State):
 
 
 def meaningless(state: State):
-    return {"messages": [AIMessage(NOT_FOUND[state["lang"]])], "route": "not_found"}
+    """كلام ملخبط: رد خاص (رسالة عادية في المحادثة، لا خطأ)"""
+    reply = random.choice(chit.GIBBERISH_REPLIES[state["lang"]])
+    return {"messages": [AIMessage(reply)], "route": "meaningless"}
 
 
 def _history_text(messages, limit=4, max_chars=300):

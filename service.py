@@ -2,6 +2,7 @@
 التشغيل:  uvicorn service:app --host 127.0.0.1 --port 8001
 """
 import hmac
+import random
 import re
 import time
 
@@ -11,7 +12,8 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel, Field
 
 import config
-from graph import NOT_FOUND, graph, is_not_found, to_messages
+import small_talk as chit
+from graph import graph, is_not_found, to_messages
 from retrieval import unique_sources
 
 app = FastAPI(title="ChafiBot")
@@ -104,8 +106,8 @@ def chat(req: ChatRequest, x_ai_key: str | None = Header(default=None)):
     text = answer.content if isinstance(answer, AIMessage) else str(answer)
     found = not is_not_found(text)
     if not found:
-        # نص موحد بلغة السؤال، مهما كتب النموذج
-        text = NOT_FOUND[state.get("lang") or "ar"]
+        # رسالة لطيفة بلغة السؤال (رسالة عادية في المحادثة)، مهما كتب النموذج
+        text = random.choice(chit.NOT_FOUND_REPLIES[state.get("lang") or "ar"])
     # المصادر تظهر فقط إذا مر السؤال بالبحث، وفقط التي أخذ منها الجواب
     text, sources = used_sources(text, state.get("docs") or [])
     clarifying = state.get("route") == "clarify"
