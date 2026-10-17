@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pymysql
+python-dotenv
+numpy
+sentence-transformers
+langgraph
+langchain-core
+langchain-ollama
