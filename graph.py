@@ -35,8 +35,9 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
 import config
+import small_talk as chit  # الكلام العادي (اسم مختلف عن العقدة small_talk)
 from calculator import calculate
-from retrieval import format_sources, is_meaningless, retrieve, unknown_words
+from retrieval import format_sources, is_meaningless, is_vague, retrieve, unknown_words
 
 
 def _keep_alive():
@@ -96,7 +97,7 @@ rewriter = _ollama(80)  # إعادة الصياغة سطر واحد
 TOOLS = {"calculate": calculate}
 
 SYSTEM_PROMPT = """أنت ChafiBot، المساعد الجبائي الذكي داخل تطبيق شافي الجزائري.
-- إذا سُئلت عن اسمك فاسمك ChafiBot.
+- إذا سُئلت عن نفسك (من أنت، من طوّرك، أي نموذج أنت...) فقل فقط: أنا مساعد جبائي فقط، ولا تذكر أي تفاصيل أخرى.
 - جاوب باختصار ووضوح: من 2 إلى 5 جمل.
 {language_rule}"""
 
@@ -107,6 +108,13 @@ LANGUAGE_RULES = {
           "if they are in Arabic or French. Keep article numbers as they are.",
     "fr": "- L'utilisateur a écrit en français : réponds UNIQUEMENT en français, en traduisant "
           "les sources si elles sont en arabe. Garde les numéros d'articles tels quels.",
+}
+
+# سؤال غير واضح: نطلب التوضيح ونقترح مواضيع
+CLARIFY = {
+    "ar": "لم أفهم سؤالك بدقة. هل تقصد أحد هذه المواضيع؟ اختر واحداً أو وضّح سؤالك أكثر.",
+    "en": "I'm not sure what you mean. Did you mean one of these topics? Pick one or clarify your question.",
+    "fr": "Je ne suis pas sûr de comprendre. Vouliez-vous dire l'un de ces sujets ? Choisissez-en un ou précisez votre question.",
 }
 
 NOT_FOUND = {
@@ -184,29 +192,6 @@ REWRITE_PROMPT = """البحث بهذا السؤال لم يجد جواباً ف
 
 # ---------------- الردود الجاهزة (فورية)
 
-GREETING = re.compile(
-    r"^\s*(ال?سلام|سلام|مرحبا|اهلا|أهلا|صباح|مساء|hello|hi|hey|good (morning|evening)|"
-    r"bonjour|bonsoir|salut)",
-    re.IGNORECASE,
-)
-THANKS = re.compile(
-    r"^\s*(صحيت|صحا|يعطيك|شكرا|شكراً|بارك|merci|thanks|thank you|thx)",
-    re.IGNORECASE,
-)
-
-SMALL_TALK_REPLIES = {
-    "greeting": {
-        "ar": "وعليكم السلام ورحمة الله، أنا ChafiBot 😊 كيف يمكنني مساعدتك في الجباية اليوم؟",
-        "en": "Hello, I'm ChafiBot 😊 How can I help you with taxes today?",
-        "fr": "Bonjour, je suis ChafiBot 😊 Comment puis-je vous aider en fiscalité ?",
-    },
-    "thanks": {
-        "ar": "العفو، يسعدني ذلك! إذا كان لديك سؤال آخر فأنا في الخدمة. 🙏",
-        "en": "You're welcome! I'm here if you have another question. 🙏",
-        "fr": "Avec plaisir ! Je suis là si vous avez une autre question. 🙏",
-    },
-}
-
 # أسئلة خارج الجباية: عدة صياغات حتى لا يتكرر نفس الرد
 OFF_TOPIC_REPLIES = {
     "ar": [
@@ -258,14 +243,11 @@ def detect_language(text):
 
 
 def small_talk_kind(text):
-    """تحية أو شكر قصير (بدون سؤال) ← رد جاهز"""
-    if len(text.split()) > 5 or "?" in text or "؟" in text:
+    """كلام عادي (تحية، شكر، "حسناً"، وداع، "من أنت"...) ← رد جاهز.
+    رسالة فيها كلمة جبائية ليست كلاماً عادياً ("حسنا والضريبة؟")"""
+    if _TAX_WORDS.search(text):
         return None
-    if THANKS.match(text):
-        return "thanks"
-    if GREETING.match(text):
-        return "greeting"
-    return None
+    return chit.kind_of(text)
 
 
 def system_prompt(lang):
@@ -282,7 +264,8 @@ class State(TypedDict):
     docs: list  # [(مقطع, درجة)]
     attempts: int  # عدد إعادات الصياغة
     tool_rounds: int  # عدد مرات استدعاء الأدوات
-    route: str  # الطريق الذي أُخذ: small_talk / not_found / llm
+    route: str  # الطريق الذي أُخذ: small_talk / not_found / clarify / llm
+    options: list  # مواضيع مقترحة عند عدم فهم السؤال
 
 
 # ---------------- العُقد
@@ -291,7 +274,7 @@ def classify(state: State):
     question = state["messages"][-1].content
     return {"question": question, "standalone": question, "search_query": question,
             "lang": detect_language(question), "off_topic": False,
-            "docs": [], "attempts": 0, "tool_rounds": 0, "route": "llm"}
+            "docs": [], "attempts": 0, "tool_rounds": 0, "route": "llm", "options": []}
 
 
 def route_after_classify(state: State):
@@ -389,7 +372,7 @@ def off_topic(state: State):
 
 def small_talk(state: State):
     kind = small_talk_kind(state["question"])
-    reply = SMALL_TALK_REPLIES[kind][state["lang"]]
+    reply = chit.REPLIES[kind][state["lang"]]
     return {"messages": [AIMessage(reply)], "route": "small_talk"}
 
 
@@ -402,6 +385,9 @@ def retrieve_node(state: State):
 
 
 def route_after_retrieve(state: State):
+    # سؤال عام جداً ("الغرامة؟") في بداية محادثة: نقترح المواضيع فوراً بدون النموذج
+    if not _has_history(state) and is_vague(state["question"]) and clarify_options(state):
+        return "clarify"
     # الترتيب هجين (معنى + كلمات)، فنأخذ أعلى درجة تشابه بالمعنى
     best = max((score for _, score in state["docs"]), default=0)
     if best >= config.RELEVANCE_THRESHOLD:
@@ -466,15 +452,46 @@ def route_after_generate(state: State):
     last = state["messages"][-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
-    # لم يجد الجواب: نعيد صياغة السؤال ونبحث مرة أخرى قبل الاستسلام
-    if is_not_found(last.content) and state["attempts"] < config.MAX_REWRITES:
-        return "retry"
+    if is_not_found(last.content):
+        # لم يجد الجواب: نعيد صياغة السؤال ونبحث مرة أخرى قبل الاستسلام
+        if state["attempts"] < config.MAX_REWRITES:
+            return "retry"
+        # ثم: إذا وُجدت مواضيع قريبة نقترحها على المستخدم بدل الفشل
+        if clarify_options(state):
+            return "clarify"
     return END
 
 
 def retry(state: State):
     # نحذف جواب "لم أجد" حتى لا يراه النموذج في المحاولة الثانية
     return {"messages": [RemoveMessage(id=state["messages"][-1].id)]}
+
+
+def clarify_options(state: State):
+    """مواضيع قريبة من السؤال (عناوين المصادر الموجودة) يختار منها المستخدم ما يقصد"""
+    options, seen = [], set()
+    for doc, score in sorted(state["docs"], key=lambda x: -x[1]):
+        if score < config.CLARIFY_MIN_SCORE:
+            continue
+        title = re.sub(r"\s+", " ", str(doc.get("title") or "")).strip(" .،:؟?")
+        key = title.lower()
+        if not title or len(title) > 90 or key in seen:
+            continue
+        seen.add(key)
+        options.append(title)
+        if len(options) >= config.CLARIFY_OPTIONS:
+            break
+    return options
+
+
+def clarify(state: State):
+    """بدل "لم يتم العثور": نسأل المستخدم ماذا يقصد ونقترح مواضيع يختار منها"""
+    update = {"messages": [AIMessage(CLARIFY[state["lang"]])],
+              "options": clarify_options(state), "route": "clarify"}
+    last = state["messages"][-1]
+    if isinstance(last, AIMessage) and is_not_found(last.content):
+        update["messages"].insert(0, RemoveMessage(id=last.id))
+    return update
 
 
 def tools(state: State):
@@ -500,6 +517,7 @@ def build_graph():
     g.add_node("generate", generate)
     g.add_node("tools", tools)
     g.add_node("retry", retry)
+    g.add_node("clarify", clarify)
 
     g.add_edge(START, "classify")
     g.add_conditional_edges("classify", route_after_classify,
@@ -507,9 +525,10 @@ def build_graph():
     g.add_edge("meaningless", END)
     g.add_conditional_edges("understand", route_after_understand, ["off_topic", "retrieve"])
     g.add_edge("off_topic", END)
-    g.add_conditional_edges("retrieve", route_after_retrieve, ["generate", "rewrite"])
+    g.add_conditional_edges("retrieve", route_after_retrieve, ["generate", "rewrite", "clarify"])
     g.add_edge("rewrite", "retrieve")  # حلقة إعادة البحث
-    g.add_conditional_edges("generate", route_after_generate, ["tools", "retry", END])
+    g.add_conditional_edges("generate", route_after_generate, ["tools", "retry", "clarify", END])
+    g.add_edge("clarify", END)
     g.add_edge("tools", "generate")  # حلقة الحساب
     g.add_edge("retry", "rewrite")  # لم يجد الجواب: بحث جديد بصياغة أخرى
     g.add_edge("small_talk", END)

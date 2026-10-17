@@ -133,6 +133,16 @@ def unknown_words(text):
             if t not in bm25.postings and not any(ch.isdigit() for ch in t)]
 
 
+def is_vague(text):
+    """سؤال عام جداً: كلمة واحدة شائعة في مواضيع كثيرة ("الغرامة؟"، "الضريبة؟")،
+    فلا يُعرف أي موضوع يقصد المستخدم"""
+    tokens = tokenize(text)
+    if len(tokens) != 1 or any(ch.isdigit() for ch in tokens[0]):
+        return False
+    df = len(bm25.postings.get(tokens[0], ()))
+    return df >= max(20, int(0.02 * len(meta)))
+
+
 def is_meaningless(text):
     """سؤال ملخبط مثل "ثهتبثتبخه": لا كلمة فيه معروفة في محتوى التطبيق ولا قريبة من كلمة معروفة"""
     tokens = tokenize(text)

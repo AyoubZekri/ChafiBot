@@ -108,12 +108,15 @@ def chat(req: ChatRequest, x_ai_key: str | None = Header(default=None)):
         text = NOT_FOUND[state.get("lang") or "ar"]
     # المصادر تظهر فقط إذا مر السؤال بالبحث، وفقط التي أخذ منها الجواب
     text, sources = used_sources(text, state.get("docs") or [])
+    clarifying = state.get("route") == "clarify"
 
     return {
         "answer": text,
         # false = لم يجد الجواب في قاعدة البيانات (Laravel يعتبرها عملية فاشلة)
         "found": found,
-        "sources": sources if found else [],
+        "sources": sources if found and not clarifying else [],
+        # سؤال غير واضح: مواضيع مقترحة، يضغط المستخدم على أحدها فيُرسل كسؤال جديد
+        "options": (state.get("options") or []) if clarifying else [],
         "calculations": calculations,
         # السؤال كما فهمه المساعد (للتشخيص: إذا كان خاطئاً فالمشكل في الفهم لا في البحث)
         "understood": state.get("standalone"),

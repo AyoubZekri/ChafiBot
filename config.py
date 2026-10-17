@@ -61,6 +61,9 @@ TOP_K = int(os.getenv("TOP_K", "6"))
 # (درجات e5 تكون عادة بين 0.70 و 0.90؛ اضبطها بالتجربة)
 RELEVANCE_THRESHOLD = float(os.getenv("RELEVANCE_THRESHOLD", "0.82"))
 MAX_REWRITES = int(os.getenv("MAX_REWRITES", "1"))
+# عند عدم فهم السؤال: اقتراح مواضيع قريبة بدل "لم يتم العثور" (درجة تشابه أدنى للاقتراح)
+CLARIFY_MIN_SCORE = float(os.getenv("CLARIFY_MIN_SCORE", "0.75"))
+CLARIFY_OPTIONS = int(os.getenv("CLARIFY_OPTIONS", "3"))
 MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "2"))
 
 # مرحلة فهم السؤال (استدعاء إضافي للنموذج):
