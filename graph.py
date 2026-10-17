@@ -70,9 +70,24 @@ def _ollama(num_predict):
         num_ctx=config.NUM_CTX,
         num_thread=config.NUM_THREAD or None,
         keep_alive=_keep_alive(),
-        # وضع التفكير موجود في Qwen3 فقط؛ لا نرسل الخيار للنماذج الأخرى
-        reasoning=False if config.DISABLE_THINKING and "qwen3" in config.LLM_MODEL else None,
+        # وضع التفكير موجود في Qwen3 (غير نسخة instruct) فقط؛ لا نرسل الخيار للنماذج الأخرى
+        reasoning=False if config.DISABLE_THINKING and "qwen3" in config.LLM_MODEL
+        and "instruct" not in config.LLM_MODEL else None,
     )
+
+
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def strip_thinking(text):
+    """يحذف "تفكير" النموذج من الجواب: <think>...</think>، أو تفكير لم يُغلق
+    (نسخ Qwen3 "thinking" تفكر دائماً حتى لو طُلب منها ألا تفعل)"""
+    text = _THINK_BLOCK.sub("", str(text or ""))
+    if "</think>" in text.lower():
+        text = re.split(r"</think>", text, flags=re.IGNORECASE)[-1]
+    if "<think>" in text.lower():  # تفكير لم يكتمل: لا جواب فيه
+        return ""
+    return text.strip()
 
 
 llm = _ollama(config.NUM_PREDICT)
@@ -343,11 +358,14 @@ def understand(state: State):
     # خارج الجباية، إلا إذا كان في السؤال كلمة جبائية (حماية من خطأ النموذج)
     if "OFF_TOPIC" in text.upper() and not _TAX_WORDS.search(state["question"]):
         return {"off_topic": True}
+    text = strip_thinking(text)
     line = text.splitlines()[0].strip(" \"'«»") if text else ""
     line = line.replace("OFF_TOPIC", "").strip()
     line = re.sub(r"^(السؤال( الكامل)?|سؤال)\s*:\s*", "", line)
-    # حماية: إذا خرج النموذج عن المطلوب نرجع للسؤال الأصلي
-    if not line or len(line) > 300:
+    # حماية: إذا خرج النموذج عن المطلوب (فارغ، طويل، أو كتب تفكيره بلغة أخرى
+    # بدل سؤال بالعربية) نرجع للسؤال الأصلي
+    if not line or len(line) > 300 or (
+            state["lang"] == "ar" and detect_language(line) != "ar"):
         line = state["question"]
     return {"standalone": line, "search_query": line}
 
@@ -387,9 +405,12 @@ def route_after_retrieve(state: State):
 
 
 def rewrite(state: State):
-    text = rewriter.invoke(REWRITE_PROMPT.format(question=state["standalone"])).content.strip()
-    return {"search_query": text.splitlines()[0].strip(" \"'«»") if text else state["standalone"],
-            "attempts": state["attempts"] + 1}
+    text = strip_thinking(rewriter.invoke(
+        REWRITE_PROMPT.format(question=state["standalone"])).content)
+    line = text.splitlines()[0].strip(" \"'«»") if text else ""
+    if not line or detect_language(line) != "ar":
+        line = state["standalone"]
+    return {"search_query": line, "attempts": state["attempts"] + 1}
 
 
 def generate(state: State):
@@ -407,6 +428,13 @@ def generate(state: State):
     # السؤال الحالي فقط (مع ردود أداة الحساب): لا أجوبة سابقة يكررها النموذج.
     # السؤال الناقص كُمّل في "understand"، فالمحادثة السابقة لم تعد لازمة هنا
     reply = model.invoke([SystemMessage(system), *_current_turn(state["messages"])])
+    if isinstance(reply, AIMessage) and not reply.tool_calls:
+        # بدون تفكير النموذج؛ وإذا لم يبقَ جواب (تفكير لم يكتمل) فهو "لم يتم العثور"
+        text = strip_thinking(reply.content)
+        # سؤال بالعربية وجواب بلا عربية = تفكير النموذج بالإنجليزية لا جواب
+        if lang == "ar" and detect_language(text) != "ar":
+            text = ""
+        reply.content = text or NOT_FOUND[lang]
     return {"messages": [reply], "route": "llm"}
 
 
