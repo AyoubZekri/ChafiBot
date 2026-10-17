@@ -2,3 +2,5 @@
 index/
 __pycache__/
 .venv/
+index.new/
+index.old/

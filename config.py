@@ -61,4 +61,6 @@ HISTORY_LIMIT = int(os.getenv("HISTORY_LIMIT", "6"))
 # مفتاح سري مشترك مع Laravel (AI_SERVICE_KEY في .env الخاص بـ Laravel)
 AI_SERVICE_KEY = os.getenv("AI_SERVICE_KEY", "")
 
-INDEX_DIR = os.path.join(os.path.dirname(__file__), "index")
+# مجلد الفهرس. deploy/rebuild-index.sh يبني في مجلد مؤقت (INDEX_DIR_OVERRIDE)
+# ثم يستبدل القديم، حتى لا تتوقف الخدمة إذا فشل البناء
+INDEX_DIR = os.getenv("INDEX_DIR_OVERRIDE") or os.path.join(os.path.dirname(__file__), "index")

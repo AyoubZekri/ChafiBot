@@ -1,0 +1,3 @@
+# سكريبتات Linux يجب أن تبقى بنهايات أسطر LF حتى تعمل على الـ VPS
+*.sh text eol=lf
+*.py text eol=lf
