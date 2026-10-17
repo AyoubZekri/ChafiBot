@@ -1,8 +1,11 @@
 """الكلام العادي في المحادثة (تحية، شكر، "حسناً"، وداع، "من أنت"...): رد جاهز فوري بدون النموذج.
 
 الكلمات بالفصحى والدارجة الجزائرية والإنجليزية والفرنسية. التطابق يتسامح مع:
-التشكيل والتطويل، أشكال الهمزة، ة/ه، ى/ي، الحروف المكررة ("شكراااا")، وعلامات الترقيم.
+التشكيل والتطويل، أشكال الهمزة، ة/ه، ى/ي، الحروف المكررة ("شكراااا")، علامات الترقيم،
+والأخطاء الإملائية ("حسننا"، "شكرن"، "السلم عليكم").
 """
+import difflib
+import itertools
 import re
 
 # ---------------- الكلمات (تُكتب بأي شكل؛ تُطبَّع تلقائياً)
@@ -218,7 +221,7 @@ def normalize(text):
     text = str(text or "").lower()
     text = re.sub(r"[ً-ْـ]", "", text)  # التشكيل والتطويل
     text = re.sub(r"[إأآا]", "ا", text)
-    text = text.replace("ة", "ه").replace("ى", "ي")
+    text = text.replace("ة", "ه").replace("ى", "ي").replace("ؤ", "و").replace("ئ", "ي")
     text = re.sub(r"(.)\1{2,}", r"\1", text)  # "شكراااا" ← "شكرا"
     text = re.sub(r"[^\w\s]", " ", text)  # علامات الترقيم والرموز التعبيرية
     return re.sub(r"\s+", " ", text).strip()
@@ -240,11 +243,39 @@ _FILLER = {normalize(w) for w in [
 ]}
 
 
+# كل كلمات العبارات، لتصحيح الأخطاء الإملائية ("حسننا" ← "حسنا")
+_VOCAB = sorted({w for phrases in PHRASES.values() for p in phrases for w in normalize(p).split()})
+_VOCAB_SET = set(_VOCAB)
+
+
+def _candidates(word):
+    """الكلمة نفسها إن كانت معروفة، وإلا أقرب الكلمات إليها (حتى 3) ثم الكلمة كما هي"""
+    if word in _VOCAB_SET or word in _FILLER or len(word) < 2 or word.isdigit():
+        return [word]
+    return difflib.get_close_matches(word, _VOCAB, n=3, cutoff=0.75) + [word]
+
+
 def kind_of(text, max_words=7):
-    """نوع الكلام العادي، أو None إذا كانت الرسالة سؤالاً حقيقياً"""
+    """نوع الكلام العادي، أو None إذا كانت الرسالة سؤالاً حقيقياً.
+    يجرّب النص كما هو، ثم بتصحيحات الأخطاء الإملائية ("حسننا" ← "حسنا")"""
     norm = normalize(text)
     if not norm or len(norm.split()) > max_words:
         return None
+    found = _kind(norm)
+    if found is not None:
+        return found
+    # كل تركيبة من التصحيحات المحتملة (الأقرب أولاً)، بحد أقصى معقول
+    options = [_candidates(w) for w in norm.split()]
+    for i, combo in enumerate(itertools.product(*options)):
+        if i >= 50:
+            break
+        candidate = " ".join(combo)
+        if candidate != norm and (found := _kind(candidate)):
+            return found
+    return None
+
+
+def _kind(norm):
     found = None
     for kind in ORDER:
         if _PATTERNS[kind].search(norm):
