@@ -214,6 +214,26 @@ REPLIES = {
     },
 }
 
+# كلام ملخبط ("عالعاخهاه"، "uiohihi"): عدة صياغات حتى لا يتكرر نفس الرد
+GIBBERISH_REPLIES = {
+    "ar": [
+        "لم أفهم ما كتبته 🤔 هل يمكنك إعادة كتابة سؤالك بوضوح؟",
+        "يبدو أن الرسالة غير واضحة 🙂 اكتب سؤالك عن الضرائب أو التصريحات وسأساعدك.",
+        "عذراً، لم أتمكن من فهم رسالتك. حاول صياغة سؤالك بكلمات أخرى.",
+        "لم تصلني الرسالة بشكل مفهوم 😅 أعد كتابتها من فضلك، وأنا في الخدمة.",
+    ],
+    "en": [
+        "I didn't understand what you wrote 🤔 Could you rewrite your question clearly?",
+        "That message isn't clear to me 🙂 Ask me about taxes or declarations and I'll help.",
+        "Sorry, I couldn't understand your message. Try phrasing your question differently.",
+    ],
+    "fr": [
+        "Je n'ai pas compris votre message 🤔 Pouvez-vous reformuler votre question ?",
+        "Votre message n'est pas clair 🙂 Posez-moi une question sur la fiscalité et je vous aiderai.",
+        "Désolé, je n'ai pas compris. Essayez de formuler votre question autrement.",
+    ],
+}
+
 # ---------------- التطبيع والتطابق
 
 

@@ -115,15 +115,14 @@ bm25 = BM25([_search_text(m) for m in meta])
 
 # ---------------- كلام ملخبط
 
-_VOWELS = set("aeiouyàâäéèêëîïôöûüù")
-
-
-def _looks_like_latin_word(token):
-    """كلمة لاتينية معقولة (فيها حروف علة، وبدون 5 حروف ساكنة متتالية)"""
-    if not re.fullmatch(r"[a-zà-ÿ]+", token):
-        return False
-    vowels = sum(ch in _VOWELS for ch in token)
-    return vowels / len(token) >= 0.2 and not re.search(r"[^aeiouyàâäéèêëîïôöûüù]{5,}", token)
+# كلمات إنجليزية/فرنسية شائعة: وجود إحداها يعني أن النص اللاتيني جملة حقيقية لا حروفاً عشوائية
+_COMMON_LATIN = re.compile(
+    r"\b(the|is|are|was|what|how|when|where|why|which|who|do|does|did|can|could|should|"
+    r"my|i|you|your|me|for|to|of|in|on|and|or|a|an|it|this|that|with|about|much|many|"
+    r"le|la|les|de|des|du|un|une|est|sont|quel|quelle|quels|quelles|comment|pourquoi|"
+    r"quand|ou|où|je|mon|ma|mes|pour|et|en|avec|sur|combien|qui|que|quoi|il|elle)\b",
+    re.IGNORECASE,
+)
 
 
 def unknown_words(text):
@@ -144,7 +143,10 @@ def is_vague(text):
 
 
 def is_meaningless(text):
-    """سؤال ملخبط مثل "ثهتبثتبخه": لا كلمة فيه معروفة في محتوى التطبيق ولا قريبة من كلمة معروفة"""
+    """كلام ملخبط مثل "ثهتبثتبخه" أو "uiohihi": لا كلمة فيه معروفة في محتوى التطبيق
+    ولا قريبة من كلمة معروفة، ولا كلمة إنجليزية/فرنسية شائعة"""
+    if _COMMON_LATIN.search(text):
+        return False
     tokens = tokenize(text)
     if not tokens:
         # حروف فقط بدون كلمات (مثل "؟؟" أو "x")
@@ -152,7 +154,7 @@ def is_meaningless(text):
     for t in tokens:
         if any(ch.isdigit() for ch in t):  # رمز أو رقم (G50، 192...)
             return False
-        if t in bm25.postings or bm25._closest(t) or _looks_like_latin_word(t):
+        if t in bm25.postings or bm25._closest(t):
             return False
     return True
 
