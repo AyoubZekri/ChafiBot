@@ -55,6 +55,10 @@ RELEVANCE_THRESHOLD = float(os.getenv("RELEVANCE_THRESHOLD", "0.82"))
 MAX_REWRITES = int(os.getenv("MAX_REWRITES", "1"))
 MAX_TOOL_ROUNDS = int(os.getenv("MAX_TOOL_ROUNDS", "2"))
 
+# مرحلة فهم السؤال (استدعاء إضافي للنموذج):
+# auto = فقط للسؤال الناقص أو بالدارجة أو فيه أخطاء (أسرع)، always = لكل سؤال
+UNDERSTAND_MODE = os.getenv("UNDERSTAND_MODE", "auto")
+
 # عدد الرسائل السابقة التي تُستعمل لتكملة سؤال ناقص (مثل "وفي G50؟")
 HISTORY_LIMIT = int(os.getenv("HISTORY_LIMIT", "6"))
 

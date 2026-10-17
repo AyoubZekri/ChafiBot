@@ -36,7 +36,7 @@ from langgraph.graph.message import add_messages
 
 import config
 from calculator import calculate
-from retrieval import format_sources, is_meaningless, retrieve
+from retrieval import format_sources, is_meaningless, retrieve, unknown_words
 
 
 def _keep_alive():
@@ -294,10 +294,34 @@ def _history_text(messages, limit=4, max_chars=300):
     return "\n".join(lines[-limit:]) or "(لا توجد)"
 
 
+# كلمات دارجة: السؤال يحتاج تحويلاً للفصحى قبل البحث
+_DIALECT = re.compile(
+    r"(^|\s)(واش|وش|شنو|شني|شنوة|قداش|شحال|كيفاش|علاش|وين|نخلص|نخلّص|نقدر|راني|راهي|راه|"
+    r"بزاف|ماشي|نتاع|تاع|ديال|كاش|باش|نديرو|ندير|يخلص|مازال|برك|بصح|شيفر|دافار)(\s|$|[؟?،,.])"
+)
+
+
+def needs_understanding(state: State):
+    """مرحلة الفهم (استدعاء إضافي للنموذج، بطيء على المعالج) فقط عند الحاجة:
+    سؤال تكملة لمحادثة، أو بالدارجة، أو فيه كلمات غير معروفة (أخطاء إملائية أو لغة أخرى)"""
+    if config.UNDERSTAND_MODE == "always":
+        return True
+    question = state["question"]
+    has_history = any(isinstance(m, AIMessage) for m in state["messages"][:-1])
+    return bool(
+        (has_history and is_follow_up(question))
+        or _DIALECT.search(question)
+        or unknown_words(question)
+    )
+
+
 def understand(state: State):
     """السؤال الكامل والمصحح: يُستعمل للبحث ويُعطى للنموذج ليعرف ماذا يقصد المستخدم.
     المحادثة السابقة تُعطى فقط إذا كانت الرسالة تكملة لها؛ وإلا قد "يكمّل" النموذج
     سؤالاً جديداً بالسؤال السابق فيرجع جواباً قديماً لا علاقة له."""
+    if not needs_understanding(state):
+        # سؤال واضح بالفصحى: يُبحث به كما هو، بدون استدعاء النموذج
+        return {"standalone": state["question"], "search_query": state["question"]}
     history = _history_text(state["messages"]) if is_follow_up(state["question"]) else "(لا توجد)"
     text = rewriter.invoke(UNDERSTAND_PROMPT.format(
         history=history, question=state["question"])).content.strip()

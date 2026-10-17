@@ -126,6 +126,13 @@ def _looks_like_latin_word(token):
     return vowels / len(token) >= 0.2 and not re.search(r"[^aeiouyàâäéèêëîïôöûüù]{5,}", token)
 
 
+def unknown_words(text):
+    """كلمات السؤال غير الموجودة في محتوى التطبيق (أخطاء إملائية، دارجة، أو لغة أخرى).
+    الرموز والأرقام (G50، 192...) لا تُحسب"""
+    return [t for t in tokenize(text)
+            if t not in bm25.postings and not any(ch.isdigit() for ch in t)]
+
+
 def is_meaningless(text):
     """سؤال ملخبط مثل "ثهتبثتبخه": لا كلمة فيه معروفة في محتوى التطبيق ولا قريبة من كلمة معروفة"""
     tokens = tokenize(text)
