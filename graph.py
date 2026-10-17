@@ -47,6 +47,21 @@ def _keep_alive():
 
 
 def _ollama(num_predict):
+    """النموذج اللغوي حسب LLM_PROVIDER:
+    - ollama: على هذا الـ VPS (مجاني، بطيء بدون GPU)
+    - api: خدمة متوافقة مع OpenAI تشغّل النموذج على GPU (سريع: ثوانٍ)"""
+    if config.LLM_PROVIDER == "api":
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=config.LLM_API_MODEL,
+            base_url=config.LLM_API_BASE,
+            api_key=config.LLM_API_KEY,
+            temperature=0.1,
+            max_tokens=num_predict,
+            timeout=90,
+            max_retries=1,
+        )
     return ChatOllama(
         model=config.LLM_MODEL,
         base_url=config.OLLAMA_URL,

@@ -57,6 +57,10 @@ def used_sources(answer, docs):
 
 @app.get("/health")
 def health():
+    if config.LLM_PROVIDER == "api":
+        return {"status": "ok" if config.LLM_API_KEY else "degraded",
+                "provider": "api", "model": config.LLM_API_MODEL,
+                "api_key": "ok" if config.LLM_API_KEY else "ناقص"}
     # هل Ollama يعمل وفيه النموذج؟ (حتى لا يبدو كل شيء سليماً وOllama متوقف)
     try:
         tags = httpx.get(f"{config.OLLAMA_URL}/api/tags", timeout=3).json()
@@ -86,6 +90,11 @@ def chat(req: ChatRequest, x_ai_key: str | None = Header(default=None)):
         # Ollama متوقف (مثلاً بعد إعادة تشغيل Colab): خطأ واضح بدل 500
         raise HTTPException(status_code=503,
                             detail=f"Ollama غير متاح على {config.OLLAMA_URL}: شغّل ollama serve")
+    except Exception as e:  # noqa: BLE001
+        # أخطاء خدمة الـ API (مفتاح خاطئ، حد الاستعمال، انقطاع): 503 برسالة واضحة
+        if type(e).__module__.startswith("openai"):
+            raise HTTPException(status_code=503, detail=f"خدمة النموذج: {type(e).__name__}: {e}")
+        raise
 
     answer = state["messages"][-1]
     # العمليات الحسابية التي نفذتها الأداة في هذا السؤال فقط

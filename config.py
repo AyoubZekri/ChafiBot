@@ -30,6 +30,14 @@ FULL_TEXT_MAX = int(os.getenv("FULL_TEXT_MAX", "2500"))
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen2.5:7b")
 
+# مكان تشغيل النموذج:
+# - ollama: محلياً على هذا السيرفر (LLM_MODEL أعلاه)
+# - api: خدمة متوافقة مع OpenAI (OpenRouter، DeepInfra، Together، Groq...) تشغّله على GPU
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+LLM_API_BASE = os.getenv("LLM_API_BASE", "https://openrouter.ai/api/v1")
+LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+LLM_API_MODEL = os.getenv("LLM_API_MODEL", "qwen/qwen-2.5-7b-instruct")
+
 # ---------------- السرعة
 # أقصى عدد كلمات (tokens) في الجواب، وحجم سياق النموذج
 NUM_PREDICT = int(os.getenv("NUM_PREDICT", "350"))
